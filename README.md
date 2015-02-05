@@ -1,8 +1,22 @@
 # Yelp Review Analyzer
 
-This repository contains the code written for my project at the Data Incubator.
+This repository contains the code written for a personal project.
 
 This includes the code for munging the data (to be added shortly), training the models (to be added shortly) and running the website.
+
+
+
+## Repository structure
+
+```
+data/
+src/
+	analysis/: helper modules for preprocessing, training, etc.
+	config/: the global config variables (files to customize).
+	review_analyzer/: the main Django app (the website).
+	scripts/: scripts for munging the data, training models and deploying the website.
+	web/: the Django project folder (main settings, etc.).
+```
 
 ## First things first
 
@@ -11,7 +25,7 @@ That should be pretty straightforward.
 
 Then rename these two files into 'src/config/django_config.py' and 'src/config/mongo_config.py'.
 
-TODO: missing some of the steps here, that's coming soon :)
+TODO: run some scripts, that's coming soon :)
 
 ## Testing locally
 
@@ -26,7 +40,7 @@ The website should now be running on [localhost:8000](http://localhost:8000/).
 
 ## Deploying on Apache
 
-Install Apache (tested with version 2.4), then add the following to the config file (/etc/apache2/apache2.conf on my Ubuntu):
+Install Apache (tested with version 2.4), then customize and add the following to the config file (/etc/apache2/apache2.conf on my Ubuntu):
 ```
 WSGIScriptAlias / /PATH/TO/CUSTOMIZE/src/web/wsgi.py
 WSGIPythonPath /PATH/TO/CUSTOMIZE/src
