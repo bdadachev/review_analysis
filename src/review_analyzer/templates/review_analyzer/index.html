@@ -1,0 +1,285 @@
+{% extends "review_analyzer/base.html" %}
+{% load staticfiles %}
+
+{% block cssimport %}	
+<link rel="stylesheet" type="text/css" href="{% static 'review_analyzer/css/cover.css' %}">
+<link rel="stylesheet" type="text/css" href="{% static 'review_analyzer/css/typeahead.css' %}">
+{% endblock cssimport %}
+
+
+{% block jsimport %}
+<script src="{% static 'review_analyzer/js/handlebars.min.js' %}"></script>
+<script src="{% static 'review_analyzer/js/typeahead.bundle.min.js' %}"></script>
+<!-- for checking if addresses are valid and getting the corresponding coordinates -->
+<script src="https://maps.googleapis.com/maps/api/js?v=3.exp"></script>
+{% endblock jsimport %}
+
+
+{% block js %}
+// restaurants search box
+var restaurants = new Bloodhound({
+	datumTokenizer: Bloodhound.tokenizers.obj.whitespace('name', 'address'),
+	queryTokenizer: Bloodhound.tokenizers.whitespace,
+	limit: 50,
+	prefetch: {
+		// url points to a json file that contains the data
+		url: "{% static 'review_analyzer/data/restaurant_dicts.json' %}"
+	}
+});
+
+// kicks off the loading/processing of `local` and `restaurantSearchDiv`
+restaurants.initialize();
+
+// passing in `null` for the `options` arguments will result in the default
+// options being used
+$('#restaurantNameInput').typeahead(null, {
+	name: 'restaurants',
+	//displayKey: 'name',
+	displayKey: function(d) { return d.name + " - " + d.address; },
+	// `ttAdapter` wraps the suggestion engine in an adapter that
+	// is compatible with the typeahead jQuery plugin
+	source: restaurants.ttAdapter(),
+	templates: {
+		empty: '<div class="empty-message">No matching restaurant.</div>',
+		suggestion: Handlebars.compile({% verbatim %}'<p><strong>{{name}}</strong> – {{address}}</p>'{% endverbatim %})
+	}
+// necessary since a parent container (bootstrap) has 'overflow: hidden;' and this hides the suggestions.
+}).on('typeahead:opened', function() {
+	$(this).closest('.panel').css('overflow','visible');
+}).on('typeahead:closed', function() {
+	$(this).closest('.panel').css('overflow','hidden');
+}); 
+
+$("#restaurantNameInput").on("typeahead:selected typeahead:autocompleted", function(e, datum) {
+	// TO IMPROVE
+	$("#restaurantId").val(datum.id); 
+	$("#restaurantId").trigger('change');
+});
+// activate the button when a valid hash is set
+$("#restaurantId").change(function() {
+	if ($("#restaurantId").length > 0) {
+		$("#restaurantBtn").prop('disabled', false);
+	} else {
+		$("#restaurantBtn").prop('disabled', true);
+	}
+}); 
+$("#restaurantBtn").click(function(){
+	var url = "{% url 'review_analyzer:restaurant_by_hash' '__hash__' %}";
+	window.location.href = url.replace("__hash__", $("#restaurantId").val());
+});
+$("#restaurantNameInput").keyup(function (e) {
+	// TO IMPROVE - SAME PROBLEM AS BUTTON ACTIVATION
+	if (e.keyCode == 13 && $("#restaurantId").val().length > 0) {
+		var url = "{% url 'review_analyzer:restaurant_by_hash' '__hash__' %}";
+		window.location.href = url.replace("__hash__", $("#restaurantId").val());
+	}
+});
+
+// 
+function getCoordinatesAndRedirect(address) 
+{
+	var geocoder = new google.maps.Geocoder();
+	geocoder.geocode( {'address': address}, function(results, status) {
+		if (status == google.maps.GeocoderStatus.OK) {
+			//console.log("Got reply with coordinates.");
+			var coord = { 
+				lat: results[0].geometry.location.lat(),
+				lng: results[0].geometry.location.lng() 
+			};
+			//console.log("Validating coordinates.");
+			// check address on server
+			validateCoordinatesAndRedirect(address, coord);
+		} else {
+			alert('Sorry, we could not locate this address. Please modify and try again!');
+			//alert(status);
+		}
+	});
+};
+
+// 
+function geolocateAndRedirect() 
+{
+	if ("geolocation" in navigator) {
+		navigator.geolocation.getCurrentPosition(
+			function(position) {
+				var coord = { 
+					lat: position.coords.latitude,
+					lng: position.coords.longitude 
+				};
+				validateCoordinatesAndRedirect("GeolocateMe", coord);
+			},
+			function() {
+				alert("Sorry, we could not geolocate you. Please try again!");
+			}
+		);
+	} else {
+		alert("Your browser does not support geolocation. Try to update it!");
+	}
+};
+
+//
+function validateCoordinatesAndRedirect(address, coord) 
+{
+	//console.log("DEBUG: now validating coordinates");
+	var url = "{% url 'review_analyzer:location' '__address__' %}";
+	// validate address with Ajax
+	$.post(
+		"{% url 'review_analyzer:validate_coordinates' %}",
+		{latitude: coord["lat"], longitude: coord["lng"]},
+		function(data) {
+			// if successful
+			//console.log(data);
+			response = JSON.parse(data);
+			if (response["acceptLocation"] == true) {
+				window.location.href = url.replace("__address__", address) + "?" + $.param(coord);
+			} else {
+				var defaultAddress = "Phoenix (AZ)";
+				var defaultCoords = {lat: "33.4500", lng: "-112.0667"};
+				noNearbyRestMsg = "The dataset used in this project does not contain any restaurant in your area. " +
+					"We are deeply sorry about that; " +
+					"we will show you restaurants in " + defaultAddress + " instead, " + 
+					"please imagine you are on vacation :)";
+				alert(noNearbyRestMsg);					
+				window.location.href = url.replace("__address__", defaultAddress) + "?" + $.param(defaultCoords);
+			}			
+		}
+	).fail(function(xhr, textStatus, errorThrown) { 
+		alert(xhr.responseText); 
+		alert('Sorry, an error occurred. Please try again in a few instants!');
+	});
+};
+
+$("#locationBtn").click(function() {		
+	getCoordinatesAndRedirect($("#locationInput").val());
+});
+$("#locationInput").keyup(function (e) {
+	if ($("#locationInput").val().length > 0) {
+		// can submit
+		$("#locationBtn").prop('disabled', false);
+		if (e.keyCode == 13) {
+			//console.log("Enter was pressed in non-empty locationInput box.")
+			// the last key was Enter
+			getCoordinatesAndRedirect($("#locationInput").val());
+		}
+	} else {
+		$("#locationBtn").prop('disabled', true);
+	}
+});
+
+$("#geolocationBtn").click(function() {		
+	geolocateAndRedirect();
+});
+
+// and do all the initializations
+$("#locationInput").val("");
+$("#locationBtn").prop('disabled', true);
+
+$("#restaurantNameInput").val("");
+$("#restaurantId").val("");
+$("#restaurantBtn").prop('disabled', true);
+
+//
+$("#topNavHome").addClass("active");
+{% endblock js %}
+
+
+{% block css %}
+#restaurantSearchDiv .tt-dropdown-menu 
+{
+	max-height: 150px;
+	overflow-y: auto;
+}
+#restaurantSearchDiv .empty-message 
+{
+	padding: 5px 10px;
+	text-align: center;
+}
+body 
+{    
+	background-image: url("{% static 'review_analyzer/images/index_background.jpg' %}");
+	background-repeat: no-repeat;
+	background-attachment: fixed;
+	background-position: center center;
+	background-size: cover;
+}
+.twitter-typeahead {
+    width: 100%;
+}
+.tt-dropdown-menu {
+   width:100%;        
+}
+
+::-webkit-input-placeholder { color:#f00; }
+::-moz-placeholder { color:#f00; } /* firefox 19+ */
+:-ms-input-placeholder { color:#f00; } /* ie */
+input:-moz-placeholder { color:#f00; }
+{% endblock css %}
+
+
+{% block content %}
+<div class="site-wrapper"><div class="site-wrapper-inner"><div class="cover-container">
+	<div class="inner cover">
+		<h2 style='font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif'><i>Tell me everything about...</i></h2>
+		<div class="panel-group" id="accordion">
+			<!-- Restaurant panel -->
+			<div class="panel panel-navlike">
+				<div class="panel-heading">
+					<h4 class="panel-title" style='font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif'>
+						<a data-toggle="collapse" data-parent="#accordion" href="#accordionOne">
+							&#9660; ... a particular restaurant.
+						</a>
+					</h4>
+				</div>
+				<div id="accordionOne" class="panel-collapse collapse">
+					<div class="panel-body">
+						<!-- input -->
+						<div class="col-lg-12">
+							<div id="restaurantSearchDiv" class="input-group">
+								<input id="restaurantNameInput" type="text" class="form-control typeahead" placeholder="Cafe Bellagio - Las Vegas, NV 89109">
+								<span class="input-group-btn">
+									<button id="restaurantBtn" class="btn btn-navlike" type="button">Go!</button>
+								</span>
+							</div><!-- /input-group -->
+						</div><!-- /.col-lg-6 -->
+						<input id="restaurantId" type="hidden">
+					</div>
+				</div>
+			</div>
+			<!-- Location panel -->
+			<div class="panel panel-navlike">
+				<div class="panel-heading">
+					<h4 class="panel-title" style='font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif'>
+						<a data-toggle="collapse" data-parent="#accordion" href="#accordionTwo">
+							&#9660; ... a particular location.
+						</a>
+					</h4>
+				</div>
+				<div id="accordionTwo" class="panel-collapse collapse">
+					<div class="panel-body">
+						<div class="col-lg-12">
+							<div id="locationSearchDiv" class="input-group">
+								<input id="locationInput" type="text" class="form-control" placeholder="Phoenix, Arizona">
+								<span class="input-group-btn">
+									<button id="locationBtn" class="btn btn-navlike" type="button">Go!</button>
+								</span>
+							</div><!-- /input-group -->
+						</div><!-- /.col-lg-6 -->
+						<p class="text-primary">or</p>
+						<div id="geolocationSearchDiv">
+							<!-- https://developer.mozilla.org/en-US/docs/Web/API/Geolocation/Using_geolocation -->
+							<button id="geolocationBtn" class="btn btn-navlike" type="button">Find my current location!</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<!-- Footer -->
+	<div class="mastfoot">
+		<div class="inner">
+			<p>Copyright &#169; {% now "Y" %} Boris Dadachev</p>
+		</div>
+	</div>
+</div></div></div>
+{% endblock content %}
+

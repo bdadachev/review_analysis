@@ -1,0 +1,17 @@
+{% extends "review_analyzer/base.html" %}
+{% load staticfiles %}
+{% load customtags %}
+
+
+{% block title %}Error | {% endblock title %}
+
+
+{% block content %}
+<div class="container" style="margin-top: 50px;">
+	<div class="row clearfix" style="position: relative;">
+		<div class="col-md-8 column">
+			{{ error_message|safe }}
+		</div>
+	</div>
+</div>
+{% endblock content %}

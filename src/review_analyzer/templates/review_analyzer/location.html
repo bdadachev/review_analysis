@@ -1,0 +1,449 @@
+{% extends "review_analyzer/base.html" %}
+{% load staticfiles %}
+
+{% block title %} Near {{ address }} | {% endblock title %}
+
+{% block cssimport %}
+	<link rel="stylesheet" type="text/css" href="{% static 'review_analyzer/css/typeahead.css' %}">
+{% endblock cssimport %}
+
+{% block jsimport %}
+	<script src="{% static 'review_analyzer/js/handlebars.min.js' %}"></script>
+	<script src="{% static 'review_analyzer/js/typeahead.bundle.min.js' %}"></script>
+	<script src="//cdnjs.cloudflare.com/ajax/libs/jquery-easing/1.3/jquery.easing.min.js"></script>
+	<script src="//maps.googleapis.com/maps/api/js?v=3.exp"></script>
+{% endblock jsimport %}
+
+{% block js %}
+	// add a helper function to check if an info window is open	
+	// this uses undocumented features, so this may break at any time... 
+	google.maps.InfoWindow.prototype.isOpen = function(){
+    		var map = infoWindow.getMap();
+    		return (map !== null && typeof map !== "undefined");
+	}
+	// various global variables
+	var map;
+	var markers = [];
+	var infoWindow = new google.maps.InfoWindow();
+	var updatesEnabled = true;
+	var currentUpdatesCenter = null;
+
+	var minScale = 2.5;
+	var maxScale = 6.5;
+	function circleMarker(rank, total) {
+		return {
+			path: google.maps.SymbolPath.CIRCLE,
+			fillColor: 'red',
+			fillOpacity: 1.0,
+			scale: 2.5 + (maxScale-minScale) / (total-1) * (total-rank),
+			strokeColor: 'white',
+			strokeWeight: 1
+		};
+	};
+
+	// initial restaurants should not be really displayed
+	function initialize() {  			
+		var mapOptions = {
+			zoom: 14,
+ 			center: new google.maps.LatLng("{{ latitude }}", "{{ longitude }}")
+		};
+		
+		map = new google.maps.Map(
+			document.getElementById('map-canvas'), 
+			mapOptions
+		);
+
+		// add listener after showing initial markers			                
+		// update the map when user changes it; e.g. zoom in/out, move, etc.
+		google.maps.event.addListener(map, 'idle', function() {		
+			if (updatesEnabled == false) {
+				console.log("bounds have changed but dont update map (updatesEnabled == false)");
+				return;
+			}
+			var smallDisplacement = false; // currentUpdatesCenter
+			if (smallDisplacement) {
+				console.log("bounds have changed but dont update map (small displacement)");
+				return;
+			}
+			console.log("bounds have changed, update map");
+			// avoid sending too many Ajax requests
+			updateMap();			
+		});
+	};
+	// initialize the map
+	google.maps.event.addDomListener(window, 'load', initialize);
+		
+	function centerOn(lat, lng) {
+		map.setCenter(new google.maps.LatLng(lat, lng));
+        };
+	
+	
+	function updateMap() {
+		// send Ajax request to server to find restaurants
+		// inside the map bounds and that match search filters (if any)
+		// then call showRestaurantsOnMap()
+		
+		var bounds = map.getBounds();
+
+		var categoryFilters = null;
+		var selectedCategories = $("#selectedCategories li");
+		if (selectedCategories.length > 0) {
+			categoryFilters = [];
+			selectedCategories.each(function(li) { // validate?
+				categoryFilters.push( $(this).find("div.input-group-addon").html() );
+			});
+		}
+		
+		$.post(
+			"{% url 'review_analyzer:update_map' %}",
+			{
+				categoryFilters: JSON.stringify(categoryFilters),
+				northEastLatitude: bounds.getNorthEast().lat(), 
+				northEastLongitude: bounds.getNorthEast().lng(),
+				southWestLatitude: bounds.getSouthWest().lat(), 
+				southWestLongitude: bounds.getSouthWest().lng()				
+			},
+			function(data) {
+				// if successful
+				//alert(data);
+				currentUpdatesCenter = map.getCenter();
+				var parsedData = JSON.parse(data);
+				var restaurants = parsedData[0];
+				var nbRestaurantsFound = parsedData[1];
+				showRestaurantsOnMap(restaurants, nbRestaurantsFound);
+			}
+		).fail(function(xhr, textStatus, errorThrown) { alert(xhr.responseText); });
+	};
+
+        function showRestaurantsOnMap(restaurants, nbRestaurantsFound, reframe) {
+		clearMap();
+		
+		// display indicative text on number of restaurants
+		var anyFilters = ($("#selectedCategories li").length > 0);
+		if (restaurants.length == nbRestaurantsFound && anyFilters) {
+			var nbRestaurantsTemplate = "Found __nbRestaurantsFound__ restaurants matching your criteria.";				
+			$("#nbRestaurantsDiv").text(nbRestaurantsTemplate.replace("__nbRestaurantsFound__", nbRestaurantsFound));
+		} else if (restaurants.length == nbRestaurantsFound && ! anyFilters) {
+			var nbRestaurantsTemplate = "Found __nbRestaurantsFound__ restaurants.";				
+			$("#nbRestaurantsDiv").text(nbRestaurantsTemplate.replace("__nbRestaurantsFound__", nbRestaurantsFound));
+		} else if (anyFilters) { // restaurants.length != nbRestaurantsFound
+			var nbRestaurantsTemplate = "Found __nbRestaurantsFound__ restaurants matching your criteria; " +
+				"showing the best __nbRestaurantsShown__.";				
+			$("#nbRestaurantsDiv").text(nbRestaurantsTemplate.replace("__nbRestaurantsFound__", nbRestaurantsFound).replace("__nbRestaurantsShown__", restaurants.length));
+		} else {
+			var nbRestaurantsTemplate = "Found __nbRestaurantsFound__ restaurants; " +
+				"showing the best __nbRestaurantsShown__.";				
+			$("#nbRestaurantsDiv").text(nbRestaurantsTemplate.replace("__nbRestaurantsFound__", nbRestaurantsFound).replace("__nbRestaurantsShown__", restaurants.length));
+		}
+
+		// persist the info window iif the associated restaurant/marker remains on the map
+		var persistInfoWindow = false;
+
+		for (var i = 0; i < restaurants.length; i++) {
+			var restaurant = restaurants[i];
+			if (infoWindow.isOpen() && restaurant["_id"] == infoWindow._id) {
+				persistInfoWindow = true;
+			};
+
+			// add marker on map
+			var marker = new google.maps.Marker({
+      				//position: new google.maps.LatLng(restaurant["latitude"], restaurant["longitude"]),\
+				position: new google.maps.LatLng(restaurant["longlat_location"][1], restaurant["longlat_location"][0]),
+      				map: map,
+      				title: restaurant["name"],				
+				id: restaurant["_id"],
+				stars: restaurant["stars"],
+				mean_rating: restaurant["mean_rating"],
+				categories: restaurant["categories"].concat(restaurant["predicted_categories"]),
+				review_count: restaurant["review_count"],
+				rank: restaurants.length-i,
+				icon: circleMarker(restaurants.length-i, restaurants.length),
+  			});
+		
+			// save marker in global array
+			markers.push(marker);
+
+			// add click listener, to display info window
+			google.maps.event.addListener(marker, 'click', function() {
+				// temporarily disable updates of map (for half a second)
+				// this is because the map may slightly move to display the infowindow
+				updatesEnabled = false;
+				setTimeout(function(){ updatesEnabled = true; }, 500);
+
+				// prepare InfoWindow if user wants to display it
+				// note for later: could show category with an icon?
+				var url = "{% url 'review_analyzer:restaurant_by_hash' '__hash__' %}";				
+				var contentString = "<div style='line-height: 1.35; overflow: hidden; white-space: nowrap;'>" + 
+					"<strong style='font-size:1.2em;'>" + this.title + "</strong><br />" +
+					"Rank: " + this.rank + "<br />" + 
+					"Average rating: " + Math.round(this.mean_rating * 10) / 10 + " stars (" + this.review_count + " ratings)<br />" +
+					"Categories: " + this.categories.toString().replace(/,/g, ", ") + ".<br />" +
+					"&nbsp;<br />" +
+					"<a href='" + url.replace("__hash__", this.id) + "' target='_blank' style='float: right;'>Show me more...</a>" +
+					"</div>";
+				infoWindow.setContent(contentString); 
+				infoWindow.setPosition(this.position); 
+				infoWindow.open(map);
+				infoWindow._id = this.id;
+			});
+
+		}
+		if (infoWindow.isOpen() && persistInfoWindow == false) {
+			infoWindow.close();
+			infoWindow._id = null;
+			//console.log("Closing info window");
+		} else if (infoWindow.isOpen()) {
+			//console.log("Persist info window");
+		}
+		if (reframe == true) {
+			fitAllMarkers();
+		}
+	};
+	
+	// helper functions
+	function clearMap() {
+		// remove all markers from the map
+		for (var i = 0; i < markers.length; i++) {
+    			markers[i].setMap(null);
+  		}
+		markers = [];
+	};
+	function fitAllMarkers() {
+		// make sure all markers on the map are displayed
+
+		// find bounds, making sure each marker is inside, and adjust the map
+		var bounds = new google.maps.LatLngBounds();		
+		for (var i = 0; i < markers.length; i++) {
+			bounds.extend(markers[i].getPosition());
+		}
+		map.fitBounds(bounds);
+	};
+	
+
+	$("#moreRestaurantsCheckbox").prop("checked", false);
+	$("#moreRestaurantsCheckbox").change(function() {
+		if(this.checked) {
+			console.log("CHECKED");
+		} else {
+			console.log("UNCHECKED");
+		}
+	});
+
+	var availableCategories = [{"name": "Active Life"}, {"name": "Adult Entertainment"}, {"name": "Afghan"}, {"name": "African"}, {"name": "Airports"}, {"name": "American (New)"}, {"name": "American (Traditional)"}, {"name": "Amusement Parks"}, {"name": "Apartments"}, {"name": "Appliances"}, {"name": "Arabian"}, {"name": "Arcades"}, {"name": "Argentine"}, {"name": "Art Galleries"}, {"name": "Arts & Crafts"}, {"name": "Arts & Entertainment"}, {"name": "Asian Fusion"}, {"name": "Australian"}, {"name": "Auto Repair"}, {"name": "Automotive"}, {"name": "Bagels"}, {"name": "Bakeries"}, {"name": "Bangladeshi"}, {"name": "Barbeque"}, {"name": "Bars"}, {"name": "Basque"}, {"name": "Beauty & Spas"}, {"name": "Bed & Breakfast"}, {"name": "Beer Bar"}, {"name": "Beer, Wine & Spirits"}, {"name": "Belgian"}, {"name": "Bistros"}, {"name": "Bowling"}, {"name": "Brasseries"}, {"name": "Brazilian"}, {"name": "Breakfast & Brunch"}, {"name": "Breweries"}, {"name": "British"}, {"name": "Bubble Tea"}, {"name": "Buffets"}, {"name": "Burgers"}, {"name": "Burmese"}, {"name": "Butcher"}, {"name": "Cafes"}, {"name": "Cafeteria"}, {"name": "Cajun/Creole"}, {"name": "Cambodian"}, {"name": "Canadian (New)"}, {"name": "Cantonese"}, {"name": "Car Wash"}, {"name": "Caribbean"}, {"name": "Casinos"}, {"name": "Caterers"}, {"name": "Champagne Bars"}, {"name": "Cheese Shops"}, {"name": "Cheesesteaks"}, {"name": "Chicken Wings"}, {"name": "Chinese"}, {"name": "Chocolatiers & Shops"}, {"name": "Cinema"}, {"name": "Cocktail Bars"}, {"name": "Coffee & Tea"}, {"name": "Colleges & Universities"}, {"name": "Colombian"}, {"name": "Comfort Food"}, {"name": "Convenience Stores"}, {"name": "Cooking Schools"}, {"name": "Country Dance Halls"}, {"name": "Creperies"}, {"name": "Cuban"}, {"name": "Cultural Center"}, {"name": "Czech"}, {"name": "Dance Clubs"}, {"name": "Day Spas"}, {"name": "Delicatessen"}, {"name": "Delis"}, {"name": "Desserts"}, {"name": "Dim Sum"}, {"name": "Diners"}, {"name": "Distilleries"}, {"name": "Dive Bars"}, {"name": "Do-It-Yourself Food"}, {"name": "Dominican"}, {"name": "Donuts"}, {"name": "Drugstores"}, {"name": "Dry Cleaning & Laundry"}, {"name": "Education"}, {"name": "Egyptian"}, {"name": "Ethiopian"}, {"name": "Ethnic Food"}, {"name": "Event Planning & Services"}, {"name": "Falafel"}, {"name": "Farmers Market"}, {"name": "Fashion"}, {"name": "Fast Food"}, {"name": "Festivals"}, {"name": "Filipino"}, {"name": "Fish & Chips"}, {"name": "Fitness & Instruction"}, {"name": "Flowers & Gifts"}, {"name": "Fondue"}, {"name": "Food"}, {"name": "Food Court"}, {"name": "Food Delivery Services"}, {"name": "Food Stands"}, {"name": "Food Trucks"}, {"name": "French"}, {"name": "Fruits & Veggies"}, {"name": "Gas & Service Stations"}, {"name": "Gastropubs"}, {"name": "Gay Bars"}, {"name": "Gelato"}, {"name": "German"}, {"name": "Gift Shops"}, {"name": "Gluten-Free"}, {"name": "Golf"}, {"name": "Greek"}, {"name": "Grocery"}, {"name": "Gyms"}, {"name": "Halal"}, {"name": "Hawaiian"}, {"name": "Health & Medical"}, {"name": "Health Markets"}, {"name": "Herbs & Spices"}, {"name": "Himalayan/Nepalese"}, {"name": "Home & Garden"}, {"name": "Home Decor"}, {"name": "Home Services"}, {"name": "Hookah Bars"}, {"name": "Horseback Riding"}, {"name": "Hospitals"}, {"name": "Hot Dogs"}, {"name": "Hot Pot"}, {"name": "Hotels"}, {"name": "Hotels & Travel"}, {"name": "Ice Cream & Frozen Yogurt"}, {"name": "Indian"}, {"name": "Indonesian"}, {"name": "Internet Cafes"}, {"name": "Irish"}, {"name": "Island Pub"}, {"name": "Italian"}, {"name": "Japanese"}, {"name": "Jazz & Blues"}, {"name": "Juice Bars & Smoothies"}, {"name": "Karaoke"}, {"name": "Kids Activities"}, {"name": "Kitchen & Bath"}, {"name": "Korean"}, {"name": "Kosher"}, {"name": "Landmarks & Historical Buildings"}, {"name": "Laotian"}, {"name": "Latin American"}, {"name": "Lebanese"}, {"name": "Leisure Centers"}, {"name": "Live/Raw Food"}, {"name": "Local Flavor"}, {"name": "Local Services"}, {"name": "Lounges"}, {"name": "Malaysian"}, {"name": "Mass Media"}, {"name": "Meat Shops"}, {"name": "Medical Spas"}, {"name": "Mediterranean"}, {"name": "Mexican"}, {"name": "Middle Eastern"}, {"name": "Modern European"}, {"name": "Mongolian"}, {"name": "Moroccan"}, {"name": "Music Venues"}, {"name": "Nightlife"}, {"name": "Outlet Stores"}, {"name": "Pakistani"}, {"name": "Party & Event Planning"}, {"name": "Patisserie/Cake Shop"}, {"name": "Performing Arts"}, {"name": "Persian/Iranian"}, {"name": "Personal Chefs"}, {"name": "Personal Shopping"}, {"name": "Peruvian"}, {"name": "Piano Bars"}, {"name": "Pizza"}, {"name": "Polish"}, {"name": "Pool Halls"}, {"name": "Portuguese"}, {"name": "Poutineries"}, {"name": "Pretzels"}, {"name": "Print Media"}, {"name": "Public Services & Government"}, {"name": "Pubs"}, {"name": "RV Parks"}, {"name": "Ramen"}, {"name": "Real Estate"}, {"name": "Russian"}, {"name": "Salad"}, {"name": "Salvadoran"}, {"name": "Sandwiches"}, {"name": "Scandinavian"}, {"name": "Scottish"}, {"name": "Seafood"}, {"name": "Seafood Markets"}, {"name": "Shanghainese"}, {"name": "Shaved Ice"}, {"name": "Shopping"}, {"name": "Shopping Centers"}, {"name": "Singaporean"}, {"name": "Slovakian"}, {"name": "Social Clubs"}, {"name": "Soul Food"}, {"name": "Soup"}, {"name": "Southern"}, {"name": "Spanish"}, {"name": "Specialty Food"}, {"name": "Specialty Schools"}, {"name": "Sporting Goods"}, {"name": "Sports Bars"}, {"name": "Sports Wear"}, {"name": "Steakhouses"}, {"name": "Street Vendors"}, {"name": "Sushi Bars"}, {"name": "Swimming Pools"}, {"name": "Szechuan"}, {"name": "Taiwanese"}, {"name": "Tapas Bars"}, {"name": "Tapas/Small Plates"}, {"name": "Taxis"}, {"name": "Tea Rooms"}, {"name": "Tex-Mex"}, {"name": "Thai"}, {"name": "Tours"}, {"name": "Transportation"}, {"name": "Turkish"}, {"name": "Ukrainian"}, {"name": "Vegan"}, {"name": "Vegetarian"}, {"name": "Venezuelan"}, {"name": "Venues & Event Spaces"}, {"name": "Vietnamese"}, {"name": "Wine Bars"}, {"name": "Wineries"}];
+
+	var categories = new Bloodhound({
+		datumTokenizer: Bloodhound.tokenizers.obj.whitespace('name'),
+		queryTokenizer: Bloodhound.tokenizers.whitespace,
+		local: availableCategories
+	});
+	categories.initialize();
+
+	var selectedCategoryTemplate = ''
+		+ '<li style="padding-bottom: 5px;">'
+		+ '	<div class="input-group">'
+		+ '		<div class="input-group-btn" >'
+		+ '			<button class="btn btn-warning" type="button"><i class="fa fa-close" style="font-size:1.2em;"></i></button>'
+		+ '		</div>'	
+		+ '		<div class="input-group-addon" style="width: 100%;">__item__</div>'		
+		+ '	</div>'
+		+ '</li>';
+	console.log(selectedCategoryTemplate);
+
+	$("#categoryInput").typeahead(null, {
+		name: 'category-typeahead',
+		displayKey: 'name',
+		source: categories.ttAdapter(),
+		templates: {
+			empty: '<div class="empty-message">No matching category.</div>'
+		}
+	// necessary since a parent container (bootstrap) has 'overflow: hidden;' and this hides the suggestions.
+	}).on('typeahead:opened', function() {
+		$(this).closest('.panel').css('overflow','visible');
+	}).on('typeahead:closed', function() {
+		$(this).val("");
+		$(this).closest('.panel').css('overflow','hidden');
+	});
+
+	
+	$(document).on("focusout","td.edit input",function(){
+		alert("finally bye");
+	});
+
+	// clean the input if previous input is there after refresh
+	$("#categoryInput").val("");
+
+	var maxNbCategories = 5;
+	$("#categoryInput").on("typeahead:selected typeahead:autocompleted", function(e, datum) {
+		// add the new category to the list of categories
+		// note: check for duplicates?
+    		$("#selectedCategories").append( selectedCategoryTemplate.replace("__item__",datum.name) );
+		// add listener to detect when the category is removed
+		$("#selectedCategories li").last().find("button").on("click", function() {
+			// remove the current category	
+			//$(this).closest("input").val(""); //this doesnt work to keep typeahead empty...		
+			$(this).closest("li").remove();
+			// somehow this inserts the input value inside the typeahead...
+			// for some reason, we need to clear the typeahead input again...
+    			$("#categoryInput").val(""); 
+			// decrement the number of categories
+			if ( $("#nbCategories").text() == "1" ) {
+				$("#nbCategories").text("All");
+			} else {
+				var newCatNb = parseInt($("#nbCategories").text()) - 1;
+				$("#nbCategories").text( newCatNb );
+				if (newCatNb == maxNbCategories - 1) {
+					// re-enable the typeahead
+					$("#categoryInput").removeAttr("disabled");
+				}
+			}
+			
+			// and re-update the map
+			updateMap();
+		});
+		// increment the number of categories
+		if ( $("#nbCategories").text() == "All" ) {
+			$("#nbCategories").text(1);
+		} else {
+			var newCatNb = parseInt($("#nbCategories").text()) + 1;
+			$("#nbCategories").text( newCatNb );
+			if (newCatNb == maxNbCategories) {
+				$("#categoryInput").attr("disabled", "disabled");
+			}			
+		}
+		// and clear the typeahead input, ready to get new input
+    		$("#categoryInput").val("");
+		// and re-update the map
+		updateMap();
+	});
+
+{% endblock js %}
+
+{% block css %}
+html, body
+{
+	/* nb: the map container needs these to display correctly */
+	height: 100%;
+	width: 100%;
+	margin: 0;
+        padding: 0;
+}
+
+#side-panel 
+{
+	position: fixed;
+	top: 50px;
+	bottom:0px;
+	width: 298px;
+	border-right: 2px solid #444;
+	background: #CCCCCC;
+}
+
+#center-panel
+{
+	height: 100%;
+	margin: 0;		
+        padding: 0;
+	padding-top: 50px;
+	padding-left: 300px;
+}
+#map-canvas 
+{
+	height: 100%;
+	width: 100%;
+	margin: 0;
+        padding: 0;
+	overflow: hidden;
+}
+.tt-dropdown-menu 
+{
+	max-height: 150px;
+	overflow-y: auto;
+	max-width: 200px;
+}
+#restaurantSearchDiv .empty-message 
+{
+	padding: 5px 10px;
+	text-align: center;
+}
+{% endblock css %}
+
+{% block content %}
+<div id="side-panel">
+	<nav class="navbar-default navbar-static-side" role="navigation" style="padding: 5px; height: 100%;">    		
+		<div class="form-group">
+			<div id="nbRestaurantsDiv"><i class="fa fa-refresh fa-spin" style="padding-right: 5px;"></i>Loading...</div>
+			<p></p>
+			<div>
+				<i class="fa fa-circle" style="font-size: 33%; color: red;"></i>
+				<i class="fa fa-circle" style="font-size: 66%; color: red;"></i>
+				<i class="fa fa-circle" style="font-size: 100%; color: red; padding-right: 5px;"></i>
+				<span style="font-size: 90%;">Bigger dots represent better restaurants.</span>
+			</div>
+			<p></p>
+		</div>
+		<div class="clearfix"></div>
+		<div class="sidebar-collapse">
+			<div class="panel-group" id="accordion">
+				<div class="panel panel-primary">
+					<div class="panel-heading">
+						<span id="nbCategories" class="label label-success pull-right">All</span>
+						<h4 class="panel-title">
+							<a data-toggle="collapse" data-parent="#accordion" href="#accordionOne">
+								&#9660; Categories
+							</a>
+						</h4>
+					</div>
+					<div id="accordionOne" class="panel-collapse collapse">
+						<div class="panel-body">
+								<div id="col-lg-12">				
+								<div>Restrict my search to:</div>
+								<input id="categoryInput" type="text" class="form-control typeahead" placeholder="Choose a category...">	
+								<p>&nbsp;</p>
+								<ul id="selectedCategories" style="list-style-type: none; padding-left: 25px;"></ul>
+								<p>&nbsp;</p>
+							</div>
+						</div>
+					</div>
+				</div>
+				<!-- To Be Implemented 
+				<div class="panel panel-primary">
+					<div class="panel-heading">
+						<span class="label label-success pull-right">None</span>
+						<h4 class="panel-title">
+							<a data-toggle="collapse" data-parent="#accordion" href="#accordionTwo">
+								&#9660; Advanced options
+							</a>
+						</h4>
+					</div>
+					<div id="accordionTwo" class="panel-collapse collapse">
+						<div class="panel-body">
+							<div class="col-lg-12">
+								<div class="control-group">
+									<p>To Be Implemented</p>
+									<div class="controls span2">
+										<label class="checkbox">
+											<input type="checkbox" value="option1" id="inlineCheckbox1"> Little waiting time
+										</label>
+										<label class="checkbox">
+											<input type="checkbox" value="option2" id="inlineCheckbox2"> Trending
+										</label>
+										<label class="checkbox">
+											<input type="checkbox" value="option3" id="inlineCheckbox3"> Popular
+										</label>
+										<label class="checkbox">
+											<input type="checkbox" value="option3" id="inlineCheckbox3"> Price range
+										</label>
+									</div>
+    								</div>
+							</div>
+						</div>
+					</div>
+			        </div> -->
+			</div>
+		</div>
+	</nav>
+</div>
+<div id="center-panel">
+	<div id="map-canvas"></div>
+</div>
+{% endblock content %}

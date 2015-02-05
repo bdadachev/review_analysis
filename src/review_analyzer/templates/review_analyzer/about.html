@@ -1,0 +1,268 @@
+{% extends "review_analyzer/base.html" %}
+{% load staticfiles %}
+
+{% block title %} About | {% endblock title %}
+
+
+{% block cssimport %}
+	<link rel="stylesheet" href="{% static 'review_analyzer/css/grayscale.css' %}">
+{% endblock cssimport %}
+
+
+{% block jsimport %}
+	<script src="//cdnjs.cloudflare.com/ajax/libs/jquery-easing/1.3/jquery.easing.min.js"></script>
+{% endblock jsimport %}
+
+
+{% block js %}	
+// auto page scrolling effects
+$(function() {
+    $('a.page-scroll').bind('click', function(event) {
+	var $anchor = $(this);
+	$('html, body').stop().animate({
+	    scrollTop: $($anchor.attr('href')).offset().top
+	}, 1500, 'easeInOutExpo');
+	event.preventDefault();
+    });
+});
+// make the top "about" link active to show we are on the about page
+$("#topNavAbout").addClass("active");
+{% endblock js %}
+
+
+{% block css %}
+.intro
+{    
+	background-image: url({% static 'review_analyzer/images/about_background.jpg' %});
+	background-repeat: no-repeat;
+	background-attachment: scroll;
+	background-position: center center;
+	background-size: cover;
+}
+{% endblock css %}
+
+
+{% block content %}
+<header class="intro">
+	<div class="intro-body">
+		<div class="container">
+			<div class="row">
+				<div class="col-md-8 col-md-offset-2" style="font-size: 1.2em; text-shadow: black 0.1em 0.1em 0.2em, -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black, -2px 0 black, 0 2px black, 2px 0 black, 0 -2px black;">
+					<p>
+					Online reviews are incredibly rich sets of information.
+					Yet, as an avid traveller and data enthusiast, I often find that websites like
+					Yelp and TripAdvisor make poor use of their data.
+					So I decided to use Machine Learning and Natural Language Processing
+					algorithms to simplify the process of choosing the perfect restaurant.
+					</p>
+					<p>
+					This page describes in more details the algorithms used in this project. 
+					Let's get started!
+					</p>
+					<a href="#data" class="btn btn-circle page-scroll">
+						<i class="fa fa-angle-double-down animated"></i>
+					</a>
+				</div>
+			</div>
+		</div>
+	</div>
+</header>
+
+<section id="data" class="container content-section text-center">
+	<div class="row">
+		<div class="col-lg-8 col-lg-offset-2">
+			<h2>Data</h2>
+			<p>
+			Review data is not easy to get. Fortunately, <a href="http://www.yelp.com" target="_blank">Yelp</a> 
+			shared some of their data for research purposes,
+			the <a href="http://www.yelp.com/dataset_challenge" target="_blank">Yelp challenge dataset (v4)</a>,
+			which contains data for businesses located in and around
+			Phoenix (US), Las Vegas (US), Madison (US), Waterloo (Canada) and Edimburgh (UK).
+			</p>
+			<p>
+			To give you an idea, the dataset contains about 14000 restaurants
+			and 700,000 associated reviews.
+			Each review contains a rating between 1 and 5 stars and, more importantly, some text.
+			</p>
+			<a href="#algorithms" class="btn btn-circle page-scroll">
+				<i class="fa fa-angle-down animated"></i>
+			</a>
+		</div>
+	</div>
+</section>
+
+<section id="algorithms" class="container content-section text-center"">
+	<div class="row">
+		<div id="carousel-example-generic" class="carousel slide" data-interval="false" data-ride="carousel">
+			<!-- Indicators -->
+			<ol class="carousel-indicators">
+		  		<li data-target="#carousel-example-generic" data-slide-to="0" class="active"></li>
+		    		<li data-target="#carousel-example-generic" data-slide-to="1"></li>
+		    		<li data-target="#carousel-example-generic" data-slide-to="2"></li>
+				<li data-target="#carousel-example-generic" data-slide-to="3"></li>
+				<li data-target="#carousel-example-generic" data-slide-to="4"></li>
+			</ol>
+			<!-- Wrapper for slides -->
+			<div class="carousel-inner">
+		    		<div class="item active" style="min-height: 350px;">
+		    			<div class="header-text hidden-xs">
+		        			<div class="col-md-10 col-md-offset-1 text-center">
+		            				<h2>Category prediction</h2>
+		            				<p>Categories are not assigned in a consistent manner
+							across the dataset: some restaurants have no categories
+							assigned, some have many (see <a href="#">add link</a>). 
+							So I predicted categories
+							from the text of the reviews to get more uniform
+							data. To do so, I have trained a binary classifier, 
+							using <a href="https://en.wikipedia.org/wiki/Logistic_regression" target="_blank">logistic regression</a>, 
+							for each category.
+							The optimal parameters are estimated with cross-validation.
+							</p>
+	       					</div>
+		    			</div>
+		    		</div>
+		    		<div class="item" style="min-height: 350px;">
+				    	<div class="header-text hidden-xs">
+		        			<div class="col-md-10 col-md-offset-1 text-center">
+		            				<h2>Topics discussed in the reviews</h2>
+							<p>
+							The key goal here was to get an idea about what are the recurrent
+							topics discussed in the reviews for a particular place.
+							I have run <a href="http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation" target="_blank">Latent Dirichlet Allocation</a> 
+							on the entire corpus of reviews, setting the number of topics to 50.
+							What I got is a list of descriptive words for each topic.
+							The results made sense, so I have then manually labelled each
+							topic to get something users can easily understand.		
+							</p>
+	       					</div>
+		    			</div>
+				</div>
+				<div class="item" style="min-height: 350px;">
+				    	<div class="header-text hidden-xs">
+		        			<div class="col-md-10 col-md-offset-1 text-center">
+		            				<h2>Restaurant rankings</h2>
+							<p>
+							How to rank restaurants? The average rating may seem
+							a sensible indicator, before realizing the "best" restaurants
+							in the dataset are recent and only have a handful of 5-star reviews.
+							And these appear before your favorite restaurant that has hundreds of reviews,
+							but an average of 4.5 stars...
+							A reasonable metric for ranking should take into account the uncertainty
+							that comes with a small number of ratings; here I used the lower bound
+							of the <a href="https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval#Wilson_score_interval" target="_blank">Wilson interval</a>.
+							</p>
+	       					</div>
+		    			</div>
+				</div>
+				<div class="item" style="min-height: 350px;">
+				    	<div class="header-text hidden-xs">
+		        			<div class="col-md-10  col-md-offset-1 text-center">
+		            				<h2>Trend estimation</h2>
+							<p>
+							Wouldn't it be nice to know how some restaurant is doing lately?
+							The ratings evolution over time can be analyzed using time-series analysis.
+							Here, I just wanted to get a simple answer for the user: 
+							are the ratings going up or down, or are they stable?
+							I have fit a line (using <a href="https://en.wikipedia.org/wiki/Linear_regression" target="_blank">linear regression</a>) 
+							and had a look at the confidence interval for the slope.
+							If 0 is inside this confidence interval, we can't say anything; otherwise,
+							the ratings are going up or down, depending on the sign of the slope,
+							in a statistically significant way.
+							Note that curves on the website are smoothed to make trends more visible.
+							</p>
+	       					</div>
+		    			</div>
+				</div>
+				<div class="item" style="min-height: 350px;">
+				    	<div class="header-text hidden-xs">
+		        			<div class="col-md-10 col-md-offset-1 text-center">
+		            				<h2>What's next?</h2>
+							<p>Here are a few ideas on what to add to this project, 
+							some of which I might implement in the future.
+							</p>
+							<p>
+							Refine the models currently used and try new algorithms.<br>
+							Extract significant phrases (e.g., "best burger in town") 
+							and do some sentiment analysis.<br>
+							Add a recommendation engine (the dataset also contains user data).<br>
+							Get data for many more cities and countries
+							(but scrapping Yelp is against their terms and conditions...).
+							</p>
+	       					</div>
+		    			</div>
+				</div>
+			</div>
+			<!-- Controls -->
+			<a class="left carousel-control" href="#carousel-example-generic" data-slide="prev">
+		    		<span class="glyphicon glyphicon-chevron-left"></span>
+			</a>
+			<a class="right carousel-control" href="#carousel-example-generic" data-slide="next">
+		    		<span class="glyphicon glyphicon-chevron-right"></span>
+			</a>
+		</div><!-- /carousel -->
+
+		<a href="#code" class="btn btn-circle page-scroll">
+			<i class="fa fa-angle-down animated"></i>
+		</a>	
+	</div>
+</section>
+
+<section id="code" class="container content-section text-center">
+	<div class="row">
+		<div class="col-lg-8 col-lg-offset-2">
+			<h2>And it's all open-source</h2>
+			<p>
+			All code for this project has been written in Python.<br>
+			The libraries used include pandas, scikit-learn, gensim, NLTK and statsmodels.
+			For the website, I have built on Django, jQuery and Bootstrap, and
+			the data is stored in a MongoDB database for scalability and speed.
+			<ul class="list-inline banner-social-buttons">                   
+		    		<li>
+				<a href="https://github.com/bdadachev/review_analysis/" class="btn btn-default btn-lg" target="_blank">
+				<i class="fa fa-github fa-fw"></i> <span class="network-name">Github (coming soon)</span>
+				</a>
+				</li>
+			</ul>
+			</p>
+			<a href="#contact" class="btn btn-circle page-scroll">
+				<i class="fa fa-angle-down animated"></i>
+			</a>
+		</div>
+	</div>
+</section>
+
+<section id="contact" class="container content-section text-center">
+	<div class="row">
+		<div class="col-lg-8 col-lg-offset-2">
+			<h2>Contact</h2>
+			<p>
+			If you have any questions or suggestions, please get in touch!
+			<ul class="list-inline banner-social-buttons">                   
+				<li>
+				<a href="mailto:boris.dadachev@mg.thedataincubator.com" class="btn btn-default btn-lg" target="_blank">
+				<i class="fa fa-envelope fa-fw"></i>
+				<span class="network-name">E-mail</span>
+				</a>
+		    		</li>
+				<li>
+				<a href="https://www.linkedin.com/in/borisdadachev" class="btn btn-default btn-lg" target="_blank">
+				<i class="fa fa-linkedin fa-fw"></i>
+				<span class="network-name">LinkedIn</span>
+				</a>
+				</li>
+				<!-- <li>
+				<a href="https://twitter.com/borisdadachev" class="btn btn-default btn-lg" target="_blank">
+				<i class="fa fa-twitter fa-fw"></i> <span class="network-name">Twitter</span></a>
+				</li> -->
+			</ul>
+			</p>
+		</div>
+	</div>
+</section>
+
+<footer>
+	<div class="container text-center">
+		<p>Copyright &#169; {% now "Y" %} Boris Dadachev</p>
+	</div>
+</footer>
+{% endblock content %}

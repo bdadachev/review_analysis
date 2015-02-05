@@ -1,0 +1,371 @@
+{% extends "review_analyzer/base.html" %}
+{% load staticfiles %}
+{% load customtags %}
+
+{% block title %}{{ name }} | {% endblock title %}
+
+{% block cssimport %}
+	<link rel="stylesheet" type="text/css" href="//code.jquery.com/ui/1.11.2/themes/ui-lightness/jquery-ui.css">
+	<link rel="stylesheet" type="text/css" href="{% static 'review_analyzer/css/metricsgraphics.css' %}">
+{% endblock cssimport %}
+
+{% block jsimport %}
+	<script src="//code.jquery.com/ui/1.11.2/jquery-ui.js"></script>
+	<script src="//cdnjs.cloudflare.com/ajax/libs/jquery-easing/1.3/jquery.easing.min.js"></script>
+	<script src="//maps.googleapis.com/maps/api/js?v=3.exp"></script>
+	<script src="//cdnjs.cloudflare.com/ajax/libs/d3/3.5.0/d3.min.js"></script>
+	<script src="{% static 'review_analyzer/js/metricsgraphics.min.js' %}"></script>
+{% endblock jsimport %}
+
+{% block js %}
+
+function initialize() {
+	var myLatlng = new google.maps.LatLng(
+		{{ latitude }}, {{ longitude }}
+	);
+	
+	var mapOptions = {
+		zoom: 15,
+		center: myLatlng
+	};
+	
+	var map = new google.maps.Map(
+		document.getElementById('map-canvas'), 
+		mapOptions
+	);
+	
+	var marker = new google.maps.Marker({
+		position: myLatlng,
+		map: map,
+		title: 'Here I am!'
+	});
+};
+
+google.maps.event.addDomListener(window, 'load', initialize);
+
+$('#mapLink').click(function(event) {
+	event.preventDefault();
+	$('html, body').stop().animate({
+    		scrollTop: $("#mapPanel").offset().top
+	}, 1500, 'easeInOutExpo');
+	
+});
+
+
+function graph_color(color) {
+	if (color == "red") {
+		return [3];
+	} else if (color == "green") {
+		return [2];
+	} else {
+		return [1];
+	}
+};
+//var graphColors = {increasing: "green", stable: "blue", decreasing: "red"};
+var graphColors = {"1": "green", "0": "blue", "-1": "red"};
+
+var initialTrendData = JSON.parse('{{ trend_data|escapejs }}'); //[{'date':new Date('2014-11-01'),'value':12}, {'date':new Date('2014-11-02'),'value':18}];
+var initialRatings = initialTrendData["ratings"];
+var initialTrend = initialTrendData["trend"];
+var initialTime = initialTrendData["time"];
+
+for (i = 0; i < initialRatings.length; i++) {
+	//console.log(initialRatings[i]["date"]);
+	//initialRatings[i]["date"] = new Date(initialRatings[i]["date"]);
+	//console.log(initialRatings[i]);
+	initialRatings[i][0] = new Date(initialRatings[i][0]);
+}
+
+function plot_ratings(data,trend) {
+	if (data.length == 0) {
+		$("#ratingsPlot").height( 250 );
+		$("#ratingsPlot").html("Sorry there is nothing to display here...");
+		return;
+	}
+	// transition is very nice if same color, but overlays if color is different.
+	// didnt find a way to clear previous graph when color changes, file bug report?
+	$('#ratingsPlot').html("");
+	//
+	var t;
+	if (trend == 1) {
+		t = "increasing";
+	} else if (trend == 0) {
+		t = "stable";
+	} else if (trend == -1) {
+		t = "decreasing";
+	}
+	//
+	$("#ratingsPlot").height("auto");
+	MG.data_graphic({		
+		data: data,
+		custom_line_color_map: graph_color(graphColors[trend]),	
+		title: "Ratings are " + t + " on this period.",
+		full_width: true,
+		height: 250,
+		left: 25,
+		right: 5,
+		target: '#ratingsPlot',
+		//x_accessor: 'date',
+		//y_accessor: 'rating',
+		list: true,
+		y_label: 'stars',
+		y_min: 0,
+		y_max: 6,
+		animate_on_load: true,
+		linked: true,
+		interpolate: "linear"	
+	});
+};
+plot_ratings(initialRatings, initialTrend);
+
+var initialRadius = 5;
+var radii = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20];
+var slideTimer;
+$("#radiusSlider").slider({
+	min: 0,
+	max: radii.length - 1,
+	step: 1,
+	value: $.inArray(initialRadius, radii),
+	slide: function(e, ui) {
+    		$(ui.handle).text(radii[ui.value]);
+		// wait a little time to avoid sending too many AJAX requests when moving the slider quickly
+		// if the slide moves again before 100ms, the timer is reset and updateStatistic is not called with the old radius
+		window.clearTimeout(slideTimer);
+    		slideTimer = window.setTimeout(function () { updateStatistics(radii[ui.value]); }, 20);
+	}
+});
+// initialize the text of the slider
+$("#radiusSlider").find(".ui-slider-handle").text(radii[$.inArray({{stats_radius}}, radii)]);
+function updateStatistics(radius) {
+	// should display something while waiting for an answer
+
+	//
+	$.post(
+		"{% url 'review_analyzer:regional_statistics' %}",
+		{
+			hash: "{{ id }}",
+			radius: radius			
+		},
+		function(data) {
+			// if successful
+			var parsedData = JSON.parse(data);
+
+			var nbRestaurantsInRadius = parsedData[0];
+			$("#nbRestaurantsInRadius").text(nbRestaurantsInRadius);
+
+			var regionalStatistics = parsedData[1];
+			$("#statsList").empty();
+			for (i = 0; i < regionalStatistics.length; i++) {
+				$("#statsList").append("<li>" + regionalStatistics[i] + "</li>");
+				if (i==1) {
+					$("#statsList").append("<li>&nbsp;</li>");
+				}
+			}
+		}
+	).fail(function(xhr, textStatus, errorThrown) { alert(xhr.responseText); });
+};
+
+$("#radiusLabel").text(radii[$.inArray(initialRadius, radii)]);
+
+{% for label in time_labels %}
+var tmpId = "{{ label }}".replace(/ /g, '') + "Btn"; // ugly hack
+$("#timeRangeBtnGroup").append('<button id="' + tmpId + '" type="button" class="btn btn-xs btn-default">{{ label }}</button>');
+$("#" + tmpId).click(function() {
+	if ($(this).hasClass("active")) {
+		return;
+	}
+	$(this).parent().find(".active").removeClass("active");
+	$(this).addClass("active");
+	// update data ajax
+	updateRatingsPlot($(this).text())
+});
+if (initialTime == "{{ label }}") {
+	$("#" + tmpId).addClass("active");
+};
+{% endfor %}
+
+function updateRatingsPlot(time) {
+	// should display something while waits for an answer
+	
+	//
+	$.post(
+		"{% url 'review_analyzer:ratings' %}",
+		{
+			hash: "{{ id }}",
+			time: time			
+		},
+		function(data) {
+			// if successful
+			var parsedData = JSON.parse(data);
+
+			var trend = parsedData["trend"];
+			var ratings = parsedData["ratings"];
+			for (i = 0; i < ratings.length; i++) {
+				//ratings[i]["date"] = new Date(ratings[i]["date"]);
+				ratings[i][0] = new Date(ratings[i][0]);
+			}
+			console.log("Received ratings: " + ratings.length);
+
+			plot_ratings(ratings, trend);
+		}
+	).fail(function(xhr, textStatus, errorThrown) { alert(xhr.responseText); });
+};
+
+function resizePanels() {
+	var maxHeight = Math.max($("#topicsPanel").height(), $("#statsPanel").height(), $("#trendPanel").height());
+	$("#topicsPanel").height(maxHeight);
+	$("#statsPanel").height(maxHeight);
+	$("#trendPanel").height(maxHeight);
+
+	var padTopics = ( maxHeight-100 - $("#topicsList").height() ) / 2;
+	$("#topicsList").css("padding-top", padTopics);
+	var padStats = ( maxHeight-200 - $("#statsList").height() ) / 2;
+	$("#statsList").css("padding-top", padStats);
+	console.log("pad " + padTopics + " " + padStats);
+};
+resizePanels();
+
+{% endblock js %}
+
+{% block css %}
+#map-canvas {
+        height: 100%;
+        margin: 0px;
+        padding: 0px
+}
+
+#radiusSlider > .ui-slider-handle {
+	text-decoration: none;
+	height: 1.3em; /* add 0.1em to default */
+	width: 1.8em; /* add 0.6em to default */
+	top: -0.35em; /* add 0.05em to default */
+	margin-left: -0.9em; /* add 0.3em to default */
+	text-align: center;
+	line-height: 18px;
+}
+{% endblock css %}
+
+{% block content %}
+<div class="container" style="margin-top: 50px;">
+	<div class="row clearfix" style="position: relative;">
+		<div class="col-md-8 column">
+			<h2 class="text-left">
+				{{ name }}
+				<small style="color: #67655D;">
+					{% for i in nbFullStars|get_range %}
+					<i class="fa fa-star"></i>
+					{% endfor %}
+					{% for i in nbHalfStars|get_range %}		
+					<i class="fa fa-star-half-o"></i>
+					{% endfor %}
+					{% for i in nbEmptyStars|get_range %}	
+					<i class="fa fa-star-o"></i>
+					{% endfor %}
+					<span style="font-size: 75%;">({{ nb_ratings }} ratings)</span>
+				</small>
+			</h2>		
+		</div>
+		<div class="col-md-4 column" style="position: absolute; bottom:0; right: 0;">
+			<div class="text-center" style="margin-bottom: 10px;">
+				<a id="mapLink" href="#">{{ short_address }}</a>
+			</div>
+		</div>
+	</div>
+	<div class="row clearfix">
+		<div class="col-md-12 column">
+			<p>&nbsp;</p>
+			<p style="font-size: 1.5em; margin-bottom: 2px;"><i class="fa fa-cutlery" style="padding-right: 15px;"></i>
+			{% if categories|length == 0 and predicted_categories|length == 0 %}
+				No assigned categories.
+			{% else %}
+				{% for cat in categories %}
+					{{ cat }}{% if forloop.last and predicted_categories|length == 0 %}.{% else %}, {% endif %}
+				{% endfor %}
+				{% for cat in predicted_categories %}
+					<span style="border-bottom: 1px dashed #999; display: inline; cursor: pointer;" rel="tooltip" title="We added this tag because we found it to be relevant based on the text of the reviews.">{{ cat }}</span>{% if forloop.last %}.{% else %}, {% endif %}
+				{% endfor %}
+				{% if predicted_categories|length > 0 %}
+				</p>
+				{% endif %}
+			{% endif %}
+			<p>&nbsp;</p>
+		</div>
+	</div>
+
+	<div class="container clearfix" style="padding-top: 15px;">
+	<div id="analysisRow" class="row">
+		<div class="col-md-4 column text-center">
+			<div id="topicsPanel" class="panel panel-primary">
+				<div class="panel-heading">
+					<h4><i class="fa fa-comments" style="padding-right: 12px;"></i>People talk about...</h4>
+				</div>
+				<div class="panel-body">					
+					<ul id="topicsList" style="list-style-type: none; padding: 0; margin: 0; font-size: 1.25em;">
+						{% for topicLabel in topics %}
+						<li>{{ topicLabel }}</li>
+						{% endfor %}
+					</ul>
+					</p>
+				</div>
+			</div>
+		</div>
+		<div class="col-md-4 column text-center">
+			<div id="statsPanel" class="panel panel-primary">
+				<div class="panel-heading">
+					<h4><i class="fa fa-info" style="padding-right: 12px;"></i>Regional statistics</h4>
+				</div>
+				<div class="panel-body">
+					<div style="padding-bottom: 20px;">
+						Radius: 
+						<div id="radiusSlider" style="width: 30%; display: inline-block; margin: 0 15px;"></div>
+						miles.
+					</div>
+					<div style="padding-bottom: 20px; font-size: 1.25em;">
+						Found <span id="nbRestaurantsInRadius">{{ stats_nb_restaurants }}</span> restaurants in the area.
+					</div>
+					<ul id="statsList" style="list-style-type: none; padding: 0; margin: 0; font-size: 1.25em;">
+						{% if stats|length == 0 %}
+						<li>None available.</li>
+						{% else %}
+						{% for stat in stats %}
+						<li>{{ stat }}</li>
+						{% if forloop.counter0 == 1 %}
+						<li>&nbsp;</li>
+				                {% endif %}
+						{% endfor %}
+						{% endif %}
+					</ul>
+				</div>
+			</div>
+		</div>
+		<div class="col-md-4 column text-center">
+			<div id="trendPanel" class="panel panel-primary">
+				<div class="panel-heading">
+					<h4><i class="fa fa-area-chart" style="padding-right: 12px;"></i>Ratings trend</h4>
+				</div>
+				<div id="ratingsBody" class="panel-body">
+					<div id="timeRangeBtnGroup" class="btn-group" role="group"></div>
+					<div id="ratingsPlot"></div>					
+				</div>
+			</div>	
+		</div>
+	</div></div>
+	<div class="row clearfix">
+		<div class="col-md-6 column col-md-offset-3 text-center">
+			<div id="mapPanel" class="panel panel-primary">
+				<div class="panel-heading">
+					<h4><i class="fa fa-home" style="padding-right: 12px;"></i>Address</h4>
+				</div>
+				<div class="panel-body">
+					<div style="padding-bottom: 20px;">{{ address|linebreaksbr }}</div>
+					<div id="map-container" style="width: 100%; height: 300px;">
+						<div id="map-canvas" style="margin: 0; padding: 0; width: 100%; height: 100%;"></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	</div>
+</div>
+
+{% endblock content %}
