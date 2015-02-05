@@ -135,10 +135,9 @@ function validateCoordinatesAndRedirect(address, coord)
 			} else {
 				var defaultAddress = "Phoenix (AZ)";
 				var defaultCoords = {lat: "33.4500", lng: "-112.0667"};
-				noNearbyRestMsg = "The dataset used in this project does not contain any restaurant in your area. " +
-					"We are deeply sorry about that; " +
-					"we will show you restaurants in " + defaultAddress + " instead, " + 
-					"please imagine you are on vacation :)";
+				noNearbyRestMsg = "The dataset used in this project only contains restaurants in and around " +
+					"Phoenix (US), Las Vegas (US), Madison (US), Waterloo (Canada) and Edimburgh (UK). " +
+					"We will show you restaurants in Phoenix; please play the game!";
 				alert(noNearbyRestMsg);					
 				window.location.href = url.replace("__address__", defaultAddress) + "?" + $.param(defaultCoords);
 			}			
