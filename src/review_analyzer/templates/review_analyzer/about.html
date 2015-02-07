@@ -110,7 +110,8 @@ $("#topNavAbout").addClass("active");
 		            				<h2>Category prediction</h2>
 		            				<p>Categories are not assigned in a consistent manner
 							across the dataset: some restaurants have no categories
-							assigned, some have many (see <a href="#">add link</a>). 
+							assigned (like <a href="{% url 'review_analyzer:restaurant_by_hash' 'MlWXHxdbIODf9GUcvUTfGQ' %}" target="_blank">this one</a>), some have many 
+							(like <a href="{% url 'review_analyzer:restaurant_by_hash' 'CBumPtpjISns8paiSwtlLw' %}" target="_blank">this one</a>). 
 							So I predicted categories
 							from the text of the reviews to get more uniform
 							data. To do so, I have trained a binary classifier, 
@@ -219,7 +220,7 @@ $("#topNavAbout").addClass("active");
 			<ul class="list-inline banner-social-buttons">                   
 		    		<li>
 				<a href="https://github.com/bdadachev/review_analysis/" class="btn btn-default btn-lg" target="_blank">
-				<i class="fa fa-github fa-fw"></i> <span class="network-name">Github (coming soon)</span>
+				<i class="fa fa-github fa-fw"></i> <span class="network-name">Github</span>
 				</a>
 				</li>
 			</ul>
