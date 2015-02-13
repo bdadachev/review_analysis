@@ -2,7 +2,7 @@
 
 This repository contains the code written for a personal project.
 
-This includes the code for munging the data (to be added shortly), training the models (to be added shortly) and running the website.
+This includes the code for munging the data, training the models (to be added shortly) and running the website.
 
 
 
@@ -25,7 +25,17 @@ That should be pretty straightforward.
 
 Then rename these two files into 'src/config/django_config.py' and 'src/config/mongo_config.py'.
 
-TODO: run some scripts, that's coming soon :)
+Then, you will need to download the raw dataset from [Yelp](http://www.yelp.com/dataset_challenge) 
+and unzip its content into the folder 'data/raw/yelp_challenge_dataset/'.
+
+Now, let's munge!
+```
+cd src/
+python scripts/1_munging/1_to_pickle.py
+python scripts/1_munging/2_preprocess.py
+```
+
+The code for training the different models is coming soon :)
 
 ## Testing locally
 
