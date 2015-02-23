@@ -133,14 +133,16 @@ function validateCoordinatesAndRedirect(address, coord)
 			if (response["acceptLocation"] == true) {
 				window.location.href = url.replace("__address__", address) + "?" + $.param(coord);
 			} else {
-				var defaultAddress = "Phoenix (AZ)";
-				var defaultCoords = {lat: "33.4500", lng: "-112.0667"};
-				noNearbyRestMsg = "The dataset used in this project only contains restaurants in and around " +
-					"Phoenix (US), Las Vegas (US), Madison (US), Waterloo (Canada) and Edimburgh (UK). " +
-					"We will show you restaurants in Phoenix; please play the game!";
-				alert(noNearbyRestMsg);					
-				window.location.href = url.replace("__address__", defaultAddress) + "?" + $.param(defaultCoords);
-			}			
+				// if no nearby restaurant, the response contains the coordinates of the nearest city
+ 				// from the dataset
+				var nearestCity = response["nearestCity"];
+				var nearestCoord = {lat: response["lat"], lng: response["lng"]};
+				var noNearbyRestMsg = "The dataset used in this project only contains restaurants in and around " +
+                                        "10 cities in the US, Canada, the UK and Germany. " +
+                                        "The nearest available city is __city__; please play the game!";
+				alert(noNearbyRestMsg.replace("__city__", nearestCity));					
+				window.location.href = url.replace("__address__", nearestCity) + "?" + $.param(nearestCoord);
+			}
 		}
 	).fail(function(xhr, textStatus, errorThrown) { 
 		alert(xhr.responseText); 

@@ -10,6 +10,9 @@ This includes the code for munging the data, training the models (to be added sh
 
 ```
 data/
+	pickle/: the munged datasets are pickled there. 
+	raw/: the raw datasets are stored there.
+	models/: the various models built for the projects are pickled there.
 src/
 	analysis/: helper modules for preprocessing, training, etc.
 	config/: the global config variables (files to customize).
@@ -72,13 +75,15 @@ The website should now be running on [localhost](http://localhost/).
 ## Deploying to Heroku
 
 The website is also ready to be deployed on Heroku.
+I am using it with the addons MongoLab (MongoDB database)
+and MailGun (email server, to know when bugs/errors occur).
 
-You will need the following buildpack from 'thenovices' for Numpy and Scipy.
+First, you will need the following buildpack from 'thenovices' for Numpy and Scipy.
 ```
 heroku config:set BUILDPACK_URL=https://github.com/thenovices/heroku-buildpack-scipy
 ```
 
-You will also need to collect the static files.
+Now you can deploy the app. As final step, you need to collect the static files.
 ```
 heroku run python src/manage.py collectstatic --noinput
 ```

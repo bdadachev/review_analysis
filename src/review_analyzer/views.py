@@ -30,17 +30,14 @@ def validate_coordinates(request):
         assert(-180. <= longitude <= 180.)       
     except:
         return HttpResponseServerError("Incorrect or illegal arguments.") 
-    # OLD - fyi, the cities in the dataset are:
-    #availableCities = [
-    #    ("Phoenix", ("33.4500", "-112.0667")),
-    #    ("Las Vegas", ("36.1215", "-115.1739")),
-    #    ("Madison", ("43.0667", "-89.4000")),
-    #    ("Waterloo", ("43.4667", "-80.5167")),
-    #    ("Edimburgh", ("55.9531", "-3.1889")),
-    #]
+    # check if a restaurant in within 20 miles, otherwise show nearest city from dataset
     maxDistance = 20 # in miles
-    acceptLocation = datawrapper.find_restaurant_in_radius(latitude, longitude, maxDistance)
-    response = {"acceptLocation": acceptLocation, "maxDistance": maxDistance}
+    acceptLocation = datawrapper.any_restaurant_in_radius(latitude, longitude, maxDistance)
+    if acceptLocation:
+        response = {"acceptLocation": True}
+    else:
+        city, lat, lng = datawrapper.find_nearest_city(latitude, longitude)
+        response = {"acceptLocation": False, "nearestCity": city, "lat": lat, "lng": lng}
     return HttpResponse(json.dumps(response))
 
 
