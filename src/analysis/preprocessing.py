@@ -1,28 +1,28 @@
-from nltk.tokenize import word_tokenize
-from nltk.stem import PorterStemmer
+from nltk.corpus import stopwords
+from nltk import stem
+import re
+import unidecode
 
-# This is the list of stop-words from NLTK.
-# It is hardcoded to avoid the manual download step (cf. nltk.download())
-STOP_WORDS = set(
-	['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 
-	'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 
-	'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 
-	'itself', 'they', 'them', 'their', 'theirs', 'themselves', 
-	'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 
-	'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 
-	'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an', 
-	'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 
-	'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 
-	'into', 'through', 'during', 'before', 'after', 'above', 'below', 
-	'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 
-	'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 
-	'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 
-	'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 
-	'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 
-	'don', 'should', 'now']
-)
+import language
 
-def simple_preprocessing(text, removeStopWords=True, stem=True):
+STOP_WORDS = {
+	shortStr : stopwords.words(language.FULL_LANGUAGE_STRINGS[shortStr]) for
+	shortStr in language.SUPPORTED_LANGUAGES
+}
+STEMMERS = {
+	shortStr : stem.SnowballStemmer(language.FULL_LANGUAGE_STRINGS[shortStr]) for
+	shortStr in language.SUPPORTED_LANGUAGES
+}
+
+def word_tokenize(text):
+	"""
+	A simple word tokenizer. Unicode strings are converted to ascii
+	using unidecode, to normalize the text (e.g., remove accents)
+	and make sure that tokenization is done properly.
+	"""
+	return filter(len, re.split("[^A-Za-z0-9]", unidecode.unidecode(text)))
+
+def simple_preprocessing(text, textLanguage, removeStopWords=True, stem=True):
 	"""
 	Preprocessing function: tokenizes the text into words, 
 	lower-case all words and optionally,
@@ -32,17 +32,18 @@ def simple_preprocessing(text, removeStopWords=True, stem=True):
 	removeStopWords: boolean indicating whether to filter stop words (default True)
 	stem: boolean indicating whether to stem words (default True)
 
-	returns: a list of words/stems
+	returns: a list of tokens (words or stems)
 	"""
-	# does lower-casing, and optionally, stop words removal and stemming
+	if textLanguage not in language.SUPPORTED_LANGUAGES:
+		raise ValueError("Unknown language.")
+
 	if removeStopWords:
-		keepWordFn = lambda word: word.isalpha() and word not in STOP_WORDS
+		keepWordFn = lambda word: word not in STOP_WORDS[textLanguage]
 	else:
-		keepWordFn = lambda word: word.isalpha()
+		keepWordFn = lambda word: True
 
 	if stem:
-		stemmer = PorterStemmer()
-		wordProcessingFn = lambda word: stemmer.stem(word.lower())
+		wordProcessingFn = lambda word: STEMMERS[textLanguage].stem(word.lower())
 	else:
 		wordProcessingFn = lambda word: word.lower()
 
