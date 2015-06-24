@@ -20,8 +20,14 @@ def word_tokenize(text):
 	using unidecode, to normalize the text (e.g., remove accents)
 	and make sure that tokenization is done properly.
 	"""
-	return filter(len, re.split("[^A-Za-z0-9]", unidecode.unidecode(text)))
+	return filter(len, re.split("[^A-Za-z]", unidecode.unidecode(text)))
 
+def normalize(tokens):
+	"""
+	A simple normalizer. The only treatment performed is lower-casing.
+	"""
+	return map(str.lower, tokens)
+                   
 def simple_preprocessing(text, textLanguage, removeStopWords=True, stem=True):
 	"""
 	Preprocessing function: tokenizes the text into words, 
@@ -43,11 +49,11 @@ def simple_preprocessing(text, textLanguage, removeStopWords=True, stem=True):
 		keepWordFn = lambda word: True
 
 	if stem:
-		wordProcessingFn = lambda word: STEMMERS[textLanguage].stem(word.lower())
+		wordProcessingFn = lambda word: STEMMERS[textLanguage].stem(word)
 	else:
-		wordProcessingFn = lambda word: word.lower()
+		wordProcessingFn = lambda word: word
 
 	return [
-		wordProcessingFn(word) for word in word_tokenize(text) if
+		wordProcessingFn(word) for word in normalize(word_tokenize(text)) if
 		keepWordFn(word)
     	]
