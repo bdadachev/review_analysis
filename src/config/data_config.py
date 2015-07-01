@@ -9,3 +9,6 @@ YELP_RAW_DATA_FOLDER = os.path.join(DATA_ROOT, "raw/yelp_challenge_dataset/")
 YELP_PICKLE_DATA_FOLDER = os.path.join(DATA_ROOT, "pickle/yelp_challenge_dataset/") 
 # folder storing the various models built
 MODELS_FOLDER = os.path.join(DATA_ROOT, "models/")
+
+# number of topics to uncover with LDA
+LDA_TOPICS_COUNT = 50
