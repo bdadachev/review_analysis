@@ -12,3 +12,6 @@ MODELS_FOLDER = os.path.join(DATA_ROOT, "models/")
 
 # number of topics to uncover with LDA
 LDA_TOPICS_COUNT = 50
+
+# filter restaurant categories that have fewer than 50 positive examples
+MINIMUM_CATEGORY_COUNTS = 50
