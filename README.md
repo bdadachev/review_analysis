@@ -2,7 +2,7 @@
 
 This repository contains the code written for a personal project.
 
-This includes the code for munging the data, training the models (to be added shortly) and running the website.
+This includes the code for munging the data, training the models and running the website.
 
 
 
@@ -38,7 +38,21 @@ python scripts/1_munging/1_to_pickle.py
 python scripts/1_munging/2_preprocess.py
 ```
 
-The code for training the different models is coming soon :)
+Then we can train and run the different models.
+```
+python scripts/2_modelling/1_train_topics.py
+python scripts/2_modelling/2_train_categories.py
+python scripts/2_modelling/3_predict_topics.py
+python scripts/2_modelling/4_predict_categories.py
+python scripts/2_modelling/5_annotate_topics.py
+```
+
+And deploy...
+```
+python scripts/3_deployment/1_prepare_data.py #coming soon
+python scripts/3_deployment/2_insert_database.py
+python scripts/3_deployment/3_upload_data_heroku.py
+```
 
 ## Testing locally
 
